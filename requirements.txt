@@ -1,6 +1,6 @@
 flask
 flask-cors
 gunicorn
-tflite-runtime
+tensorflow-cpu
 numpy
 pandas
