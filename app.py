@@ -43,6 +43,3 @@ def predict():
     return jsonify({
         "probability_percent": prob_percent
     })
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5123, debug=True)
