@@ -1,11 +1,14 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import os
 import numpy as np
 import tflite_runtime.interpreter as tflite
 
 
 # Load TFLite model and allocate tensors
-interpreter = tflite.Interpreter(model_path="gacha_model.tflite")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "gacha_model.tflite")
+interpreter = tflite.Interpreter(model_path=MODEL_PATH)
 interpreter.allocate_tensors()
 
 # Input/output details
