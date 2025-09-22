@@ -1,15 +1,24 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import numpy as np
-from tensorflow.keras.models import load_model
+import tflite_runtime.interpreter as tflite
 
-# Load model
-model = load_model("gacha_model.keras")
 
+# Load TFLite model and allocate tensors
+interpreter = tflite.Interpreter(model_path="gacha_model.tflite")
+interpreter.allocate_tensors()
+
+# Input/output details
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+
+# Max rolls cho từng banner
 MAX_ROLLS = {1: 90, 2: 80}
 
+# Flask app
 app = Flask(__name__)
 CORS(app)
+
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -17,6 +26,7 @@ def predict():
     roll = int(data.get("roll", 1))
     banner_type = int(data.get("banner_type", 1))
 
+    # Validate input
     if banner_type not in MAX_ROLLS:
         return jsonify({"error": "Invalid banner_type"}), 400
     if not (1 <= roll <= MAX_ROLLS[banner_type]):
@@ -24,12 +34,24 @@ def predict():
 
     max_roll = MAX_ROLLS[banner_type]
 
-    # Predict local probabilities p_i for i = 1..roll
-    rolls = np.arange(1, roll + 1)
-    X_roll = (rolls / max_roll).reshape(-1, 1).astype("float32")
-    X_banner = np.full((roll,), banner_type, dtype="int32").reshape(-1, 1)
+    local_probs = []
+    for r in range(1, roll + 1):
+        # Chuẩn hóa roll
+        roll_val = np.array([[r / max_roll]], dtype="float32")
+        banner_val = np.array([[banner_type]], dtype="int32")
 
-    local_probs = model.predict([X_roll, X_banner], verbose=0).flatten()
+        # Set tensor cho từng input
+        interpreter.set_tensor(input_details[0]['index'], roll_val)
+        interpreter.set_tensor(input_details[1]['index'], banner_val)
+
+        # Run model
+        interpreter.invoke()
+
+        # Lấy kết quả
+        prob = interpreter.get_tensor(output_details[0]['index'])[0][0]
+        local_probs.append(prob)
+
+    local_probs = np.array(local_probs)
 
     # Cumulative probability
     cumulative_prob = 1 - np.prod(1 - local_probs)
@@ -38,8 +60,7 @@ def predict():
     if (banner_type == 1 and roll == 90) or (banner_type == 2 and roll == 80):
         cumulative_prob = 1.0
 
-    prob_percent = f"{cumulative_prob * 100:.2f}%"
-
     return jsonify({
-        "probability_percent": prob_percent
+        "probability_percent": f"{cumulative_prob * 100:.2f}%"
     })
+
